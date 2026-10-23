@@ -39,6 +39,7 @@ def start_SUT(website_url, preparations, *, backend: BrowserBackend = None):
     session = backend.start(website_url)
     try:
         for prepare in preparations:
+            # The facade already records browser operations inside setup functions.
             prepare(session.page)
     except BaseException:
         session.close()
@@ -81,7 +82,7 @@ def execute_action_description(session, description, value=None, *, run_cnt=None
     return result
 
 
-def check_oracles(driver, oracles, oracle_findings, seq, acc):
+def check_oracles(driver, oracles, oracle_findings, seq, acc, *, record_result=None):
 
     """Run each oracle on the backend-specific browser object after an action.
 
@@ -101,10 +102,20 @@ def check_oracles(driver, oracles, oracle_findings, seq, acc):
             oracle(driver)
         except AssertionError as e:
             oracle_findings.append(print_oracle_finding(oracle.__name__, e, seq, acc))
+            if record_result is not None:
+                # EVIDENCE - oracle outcomes: save the failed result after the original finding handling.
+                record_result(oracle, 'failed', e)
         except Exception as e:
             print_oracle_error(oracle.__name__, e)
+            if record_result is not None:
+                # EVIDENCE - oracle outcomes: save the error before the original interactive pause.
+                record_result(oracle, 'error', e)
             # Add an interactive pause for an unexpected error.
             stop = input("")
+        else:
+            if record_result is not None:
+                # EVIDENCE - oracle outcomes: save a passed result after the callback returns normally.
+                record_result(oracle, 'passed', None)
     return checked
 
 
@@ -216,6 +227,11 @@ def testar(url, num_runs, length_sequence, filter_elements, preparations, oracle
                             if result.status != 'execution_skipped'
                             or action['selector'] != selected_action['selector']
                         ]
+                        if result.status == 'execution_skipped':
+                            # EVIDENCE - action candidates: optional backend hook saves the remaining list.
+                            record_candidates = getattr(session, 'record_action_candidates', None)
+                            if record_candidates is not None:
+                                record_candidates(remaining_actions)
 
                 # Three outcomes of the SELECT and EXECUTE loop:
                 if not remaining_actions:
@@ -237,8 +253,12 @@ def testar(url, num_runs, length_sequence, filter_elements, preparations, oracle
                                    f'{session.actionable_element_count} elements | {len(possible_actions)} actions')
                     # Oracles read the current page. The next iteration discovers
                     # fresh actions; never repeat a failed attempt automatically.
+                    # EVIDENCE - oracle outcomes: Playwright sessions provide this optional recording hook.
+                    # Other backends keep the original oracle handling when the hook is absent.
+                    record_oracle_result = getattr(session, 'record_oracle_result', None)
                     oracle_checks += check_oracles(
-                        session.page, oracles, oracle_findings, run_cnt, attempts)
+                        session.page, oracles, oracle_findings, run_cnt, attempts,
+                        record_result=record_oracle_result)
             if consecutive_execution_failures >= max_failures:
                 reason = print_sequence_stop(
                     run_cnt, f"{max_failures} consecutive failed attempts.")

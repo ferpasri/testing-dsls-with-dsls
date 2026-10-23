@@ -27,3 +27,5 @@ python testingTESTAR.py
 The facade writes new traces under `target/traces`, relative to the directory where miniTESTAR is started. The repository's existing ignore rule excludes `target` directories from commits.
 
 When distributing an updated library or adapter, rebuild its wheel from its source repository and update the corresponding filename in `requirements-evidence.txt`. Keep these wheels and the requirements file together in the branch.
+
+This branch adds tool-level recording hooks. See [the integration notes](../EVIDENCE.md) and the `EVIDENCE` comments in the Python code.

@@ -8,8 +8,9 @@ Page is one tab, stored in session.page.
 A Locator is a query used to find an element again, not a saved HTML node. 
 """
 import json
+from testar_evidence_playwright import ActionCandidate
 from performance import PerformanceMeasurements
-from testar_evidence_playwright.sync_api import Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError, Locator, sync_playwright
+from testar_evidence_playwright.sync_api import Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError, Locator, evidence_for, sync_playwright
 from input_data_generation import generate_random_text, generate_random_number, generate_naughty_string
 from reporting import log_info, print_performance_phase, print_derivation_retry
 from browser_backend import ActionNotReachable, ActionResult
@@ -121,6 +122,7 @@ class PlaywrightSession:
                 with self.performance.measure('descriptions'):
                     descriptions = self.derive_action_descriptions(elements)
                 print_performance_phase(self.performance, 'descriptions', f'{len(descriptions)} actions')
+                self.record_action_candidates(descriptions)
                 return descriptions
             except PlaywrightError as error:
                 message = str(error)
@@ -351,6 +353,28 @@ class PlaywrightSession:
         """
         return element.evaluate(_DESCRIPTION_DATA_JS)
 
+    def _action_candidate(self, description):
+        """Translate miniTESTAR's description into the adapter's action candidate."""
+        return ActionCandidate(description['kind'], "miniTESTAR " + description['kind'],
+                               self.page.locator(description['selector']), description['parameters'])
+
+    def record_action_candidates(self, descriptions):
+        # EVIDENCE - action candidates: save discovered choices, including those never selected.
+        # Eligible means these survived the tool's selectors and filters; reachability is checked later.
+        evidence_for(self.page).record_candidates(
+            [self._action_candidate(description) for description in descriptions], scope="eligible")
+
+    def record_oracle_result(self, oracle, status, error):
+        recorder = evidence_for(self.page)
+        # EVIDENCE - oracle outcomes: capture the page and save the callback's reported result.
+        # Ordinary callbacks do not identify a property: this result targets the observation,
+        # with an unknown reading rather than claiming every captured property was checked.
+        recorder.capture()
+        identity = getattr(oracle, '__module__', '') + '.' + getattr(oracle, '__qualname__', type(oracle).__name__)
+        recorder.checks.record_result("minitestar:oracle:" + identity,
+                                      getattr(oracle, '__name__', type(oracle).__name__), status,
+                                      None if error is None else str(error))
+
     def execute_action_description(self, description, value=None):
         """Execute the action once and return its ActionResult.
 
@@ -406,11 +430,11 @@ class PlaywrightSession:
         parameters = description['parameters']
         if kind == 'click':
             self._log('click', element)
-            element.click()
+            self._record_action(description, element, parameters, element.click)
         elif kind == 'press_key':
             key = parameters['key']
             self._log('press key', element, key)
-            element.press(key)
+            self._record_action(description, element, parameters, lambda: element.press(key))
         elif kind == 'type_text':
             if parameters['mode'] not in _INPUT_MODES or parameters['submit_key'] != _TEXT_SUBMIT_KEY:
                 raise ValueError(f'Only append, prepend or replace followed by {_TEXT_SUBMIT_KEY} is supported')
@@ -427,13 +451,25 @@ class PlaywrightSession:
                 value = generators[strategy]()
             if not isinstance(value, str):
                 raise ValueError('type_text requires a string value')
-            self._type(element, 'type text keys', value, mode=parameters['mode'])
+            self._record_action(description, element, {**parameters, 'value': value},
+                                lambda: self._type(element, 'type text keys', value, mode=parameters['mode']))
         elif kind == 'select_option':
             label = parameters['label']
             self._log('select dropdown option', element, label)
-            element.select_option(label=label)
+            self._record_action(description, element, parameters, lambda: element.select_option(label=label))
         else:
             raise ValueError('Unknown action kind: ' + str(kind))
+
+    def _record_action(self, description, element, parameters, operation):
+        recorder = evidence_for(self.page)
+        candidate = self._action_candidate(description)
+        # EVIDENCE - action executions: delegate the original operation and record its outcome.
+        # A compound action, such as typing plus Enter, is recorded as one execution.
+        # Its browser operations do not create separate facade execution records.
+        # The adapter redacts password values in the supplied parameters.
+        recorder.perform(candidate.kind, candidate.name, element, parameters, operation, candidate=candidate)
+        # EVIDENCE - action executions: capture the result, even when no oracle runs.
+        recorder.capture()
 
     def _check_action_reachability(self, element):
         """Check that the element is enabled and that its center can be clicked.
