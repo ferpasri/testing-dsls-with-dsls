@@ -8,7 +8,8 @@ Page is one tab, stored in session.page.
 A Locator is a query used to find an element again, not a saved HTML node. 
 """
 import json
-from testar_evidence_playwright import ActionCandidate
+from testar_evidence import Oracle
+from testar_evidence_playwright import AvailableAction
 from performance import PerformanceMeasurements
 from testar_evidence_playwright.sync_api import Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError, Locator, evidence_for, sync_playwright
 from input_data_generation import generate_random_text, generate_random_number, generate_naughty_string
@@ -122,7 +123,7 @@ class PlaywrightSession:
                 with self.performance.measure('descriptions'):
                     descriptions = self.derive_action_descriptions(elements)
                 print_performance_phase(self.performance, 'descriptions', f'{len(descriptions)} actions')
-                self.record_action_candidates(descriptions)
+                self.record_available_actions(descriptions)
                 return descriptions
             except PlaywrightError as error:
                 message = str(error)
@@ -353,25 +354,25 @@ class PlaywrightSession:
         """
         return element.evaluate(_DESCRIPTION_DATA_JS)
 
-    def _action_candidate(self, description):
-        """Translate miniTESTAR's description into the adapter's action candidate."""
-        return ActionCandidate(description['kind'], "miniTESTAR " + description['kind'],
+    def _available_action(self, description):
+        """Translate miniTESTAR's description into the adapter's available action."""
+        return AvailableAction(description['kind'], "miniTESTAR " + description['kind'],
                                self.page.locator(description['selector']), description['parameters'])
 
-    def record_action_candidates(self, descriptions):
-        # EVIDENCE - action candidates: save discovered choices, including those never selected.
+    def record_available_actions(self, descriptions):
+        # EVIDENCE - available actions: save discovered choices, including those never selected.
         # Eligible means these survived the tool's selectors and filters; reachability is checked later.
-        evidence_for(self.page).record_candidates(
-            [self._action_candidate(description) for description in descriptions], scope="eligible")
+        evidence_for(self.page).record_available_actions(
+            [self._available_action(description) for description in descriptions], scope="eligible")
 
     def record_oracle_result(self, oracle, status, error):
         recorder = evidence_for(self.page)
         # EVIDENCE - oracle outcomes: capture the page and save the callback's reported result.
         # Ordinary callbacks do not identify a property: this result targets the observation,
-        # with an unknown reading rather than claiming every captured property was checked.
+        # with an unknown observed value rather than claiming every captured property was checked.
         recorder.capture()
         identity = getattr(oracle, '__module__', '') + '.' + getattr(oracle, '__qualname__', type(oracle).__name__)
-        recorder.checks.record_result("minitestar:oracle:" + identity,
+        recorder.checks.record_result(Oracle("minitestar:oracle:" + identity),
                                       getattr(oracle, '__name__', type(oracle).__name__), status,
                                       None if error is None else str(error))
 
@@ -462,12 +463,12 @@ class PlaywrightSession:
 
     def _record_action(self, description, element, parameters, operation):
         recorder = evidence_for(self.page)
-        candidate = self._action_candidate(description)
+        available_action = self._available_action(description)
         # EVIDENCE - action executions: delegate the original operation and record its outcome.
         # A compound action, such as typing plus Enter, is recorded as one execution.
         # Its browser operations do not create separate facade execution records.
         # The adapter redacts password values in the supplied parameters.
-        recorder.perform(candidate.kind, candidate.name, element, parameters, operation, candidate=candidate)
+        recorder.perform(available_action.action_type, available_action.name, element, parameters, operation, available_action=available_action)
         # EVIDENCE - action executions: capture the result, even when no oracle runs.
         recorder.capture()
 

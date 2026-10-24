@@ -228,10 +228,10 @@ def testar(url, num_runs, length_sequence, filter_elements, preparations, oracle
                             or action['selector'] != selected_action['selector']
                         ]
                         if result.status == 'execution_skipped':
-                            # EVIDENCE - action candidates: optional backend hook saves the remaining list.
-                            record_candidates = getattr(session, 'record_action_candidates', None)
-                            if record_candidates is not None:
-                                record_candidates(remaining_actions)
+                            # EVIDENCE - available actions: optional backend hook saves the remaining list.
+                            record_available_actions = getattr(session, 'record_available_actions', None)
+                            if record_available_actions is not None:
+                                record_available_actions(remaining_actions)
 
                 # Three outcomes of the SELECT and EXECUTE loop:
                 if not remaining_actions:
