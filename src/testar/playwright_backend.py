@@ -88,8 +88,6 @@ class PlaywrightSession:
         self._description_targets = {}
         self.performance = PerformanceMeasurements()
         self.actionable_element_count = 0
-        # A steps wrapper can delegate actual operations through this optional hook.
-        self.action_runner = None
 
     def close(self):
         """Close the context and browser, then stop Playwright.
@@ -408,11 +406,11 @@ class PlaywrightSession:
         parameters = description['parameters']
         if kind == 'click':
             self._log('click', element)
-            self._perform_action(description, element, parameters, element.click)
+            element.click()
         elif kind == 'press_key':
             key = parameters['key']
             self._log('press key', element, key)
-            self._perform_action(description, element, parameters, lambda: element.press(key))
+            element.press(key)
         elif kind == 'type_text':
             if parameters['mode'] not in _INPUT_MODES or parameters['submit_key'] != _TEXT_SUBMIT_KEY:
                 raise ValueError(f'Only append, prepend or replace followed by {_TEXT_SUBMIT_KEY} is supported')
@@ -429,19 +427,13 @@ class PlaywrightSession:
                 value = generators[strategy]()
             if not isinstance(value, str):
                 raise ValueError('type_text requires a string value')
-            self._perform_action(description, element, {**parameters, 'value': value},
-                                 lambda: self._type(element, 'type text keys', value, mode=parameters['mode']))
+            self._type(element, 'type text keys', value, mode=parameters['mode'])
         elif kind == 'select_option':
             label = parameters['label']
             self._log('select dropdown option', element, label)
-            self._perform_action(description, element, parameters, lambda: element.select_option(label=label))
+            element.select_option(label=label)
         else:
             raise ValueError('Unknown action kind: ' + str(kind))
-
-    def _perform_action(self, description, element, parameters, operation):
-        if self.action_runner is not None:
-            return self.action_runner(description, element, parameters, operation)
-        return operation()
 
     def _check_action_reachability(self, element):
         """Check that the element is enabled and that its center can be clicked.

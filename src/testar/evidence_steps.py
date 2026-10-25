@@ -13,7 +13,6 @@ class EvidenceRecordingSteps:
     def __init__(self, steps):
         self.steps = steps
         self._available_descriptions = None
-        self._original_action_runner = None
 
     @property
     def performance(self):
@@ -26,9 +25,6 @@ class EvidenceRecordingSteps:
     def begin_sequence(self, url):
         self._available_descriptions = None
         self.steps.begin_sequence(url)
-        # Preparations use the facade; exploration operations use our compound-action boundary.
-        self._original_action_runner = self.steps.session.action_runner
-        self.steps.session.action_runner = self._record_action
 
     def derive_actions(self):
         descriptions = self.steps.derive_actions()
@@ -61,8 +57,6 @@ class EvidenceRecordingSteps:
             self.steps.oracles = original_oracles
 
     def end_sequence(self):
-        if self.steps.session is not None:
-            self.steps.session.action_runner = self._original_action_runner
         self.steps.end_sequence()
 
     def _available_action(self, description):
@@ -73,21 +67,12 @@ class EvidenceRecordingSteps:
     def record_available_actions(self, descriptions):
         # EVIDENCE - available actions: retain eligible choices, including unexecuted ones.
         # These passed selection filters; reachability is still checked before execution.
-        evidence_for(self.steps.session.page).record_available_actions(
-            [self._available_action(description) for description in descriptions], scope='eligible')
-        self._available_descriptions = list(descriptions)
-
-    def _record_action(self, description, element, parameters, operation):
         recorder = evidence_for(self.steps.session.page)
-        available_action = self._available_action(description)
-        # EVIDENCE - compound actions: record the original operation once with its generated input.
-        # The backend invokes this hook after reachability checks and input generation.
-        # Nested browser operations do not create duplicate executions; passwords are redacted.
-        result = recorder.perform(available_action.action_type, available_action.name, element,
-                                  parameters, operation, available_action=available_action)
-        # EVIDENCE - resulting observation: capture it even when no oracle runs.
+        recorder.record_available_actions(
+            [self._available_action(description) for description in descriptions], scope='eligible')
+        # Keep the tool's available-action list separate from automatically recorded browser operations.
         recorder.capture()
-        return result
+        self._available_descriptions = list(descriptions)
 
     def _recording_oracle(self, oracle):
         @wraps(oracle)
