@@ -1,9 +1,6 @@
 """Record miniTESTAR testing information while delegating its original steps."""
 from functools import wraps
 
-from TESTARsteps import TESTARSteps
-from miniTESTAR import testar
-from playwright_backend import PlaywrightBackend
 from testar_evidence import Oracle
 from testar_evidence_playwright import AvailableAction
 from testar_evidence_playwright.sync_api import evidence_for
@@ -15,12 +12,22 @@ class EvidenceRecordingSteps:
         self._available_descriptions = None
 
     @property
-    def performance(self):
-        return self.steps.performance
+    def session(self):
+        return self.steps.session
 
-    @property
-    def actionable_element_count(self):
-        return self.steps.actionable_element_count
+    def begin_test(self):
+        self.steps.begin_test()
+
+    def end_test(self):
+        self.steps.end_test()
+
+    def report_test(self, url, num_runs, length_sequence, oracle_findings,
+                    execution_failures=None, sequence_stops=None, *,
+                    sequence_results=None, total_seconds=None):
+        return self.steps.report_test(
+            url, num_runs, length_sequence, oracle_findings,
+            execution_failures, sequence_stops,
+            sequence_results=sequence_results, total_seconds=total_seconds)
 
     def begin_sequence(self, url):
         self._available_descriptions = None
@@ -104,15 +111,3 @@ class EvidenceRecordingSteps:
         recorder.checks.record_result(Oracle('minitestar:oracle:' + identity),
                                       getattr(oracle, '__name__', type(oracle).__name__), status,
                                       None if error is None else str(error))
-
-
-def testar_with_evidence(url, num_runs, length_sequence, filter_elements, preparations, oracles,
-                         *, backend=None, measure_timings=False, max_failures=5):
-    # EVIDENCE - integration entry point: keep the original TESTAR loop and wrap its steps.
-    if backend is None:
-        backend = PlaywrightBackend()
-    steps = EvidenceRecordingSteps(TESTARSteps(backend=backend, filters=filter_elements,
-                                              preparations=preparations, oracles=oracles))
-    return testar(url, num_runs, length_sequence, filter_elements, preparations, oracles,
-                  backend=backend, measure_timings=measure_timings, max_failures=max_failures,
-                  steps=steps)

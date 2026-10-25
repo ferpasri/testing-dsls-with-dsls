@@ -2,7 +2,7 @@
 
 The Playwright facade captures observations, individual browser operations, and their outcomes. This intermediate integration adds miniTESTAR's available actions and custom oracle results.
 
-The demo entry points use `testar_with_evidence(...)`, which wraps the original `TESTARSteps` in `EvidenceRecordingSteps`. The TESTAR loop uses its existing `steps=` argument. Search for `# EVIDENCE` in `evidence_steps.py` to find the recording points.
+`miniTESTAR.configure_steps(...)` wraps the original `TESTARSteps` in `EvidenceRecordingSteps`, followed by `PerformanceTESTARSteps` when timing is enabled. Demo entry points use the ordinary `testar(...)` function with named arguments. The test loop delegates to the configured steps. Search for `# EVIDENCE` in `evidence_steps.py` to find the recording points.
 
 ## 1. Available actions: what could be selected
 
