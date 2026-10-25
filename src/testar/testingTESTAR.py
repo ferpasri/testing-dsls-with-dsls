@@ -105,11 +105,42 @@ def test_parabank():
            [filter_external_links], [login], [parabank_no_internal_error],
            backend=PlaywrightBackend(), measure_timings=True)
 
+def test_spark():
+    """Log in to Spark and run test sequences, excluding the account log out."""
+    from playwright_backend import PlaywrightBackend
+
+    # Read local demo credentials.
+    credentials_path = Path(__file__).with_name('sut_credentials')
+    credentials = {}
+    for line in credentials_path.read_text(encoding='utf-8-sig').splitlines():
+        name, separator, value = line.partition(':')
+        if separator:
+            credentials[name.strip()] = value.strip()
+    if not credentials.get('username') or not credentials.get('password'):
+        raise ValueError('sut_credentials must contain username: and password: values')
+
+    def filter_account_menu(page):
+        # Exclude the account button which contains the log out logic.
+        return page.get_by_role('button').filter(
+            has=page.locator('.material-icons', has_text='account_circle')
+        )
+
+    def login(page):
+        page.locator('input[name="id"]').fill(credentials['username'])
+        page.locator('input[name="password"]').fill(credentials['password'])
+        page.locator('button[type="submit"]').filter(has_text='Sign in').click()
+        page.locator('b:text-is("Projects")').wait_for(state='visible', timeout=10000)
+
+    testar('https://spark.testar.org/', 2, 10,
+           [filter_account_menu], [login], [],
+           backend=PlaywrightBackend(), measure_timings=True)
+
 
 if __name__ == "__main__":
     # Run the tests below in order. Comment out any calls you want to skip.
-    test_cambio()
+    #test_cambio()
     #test_sudoku()
     #test_random_generator()
     #test_saucer()
     #test_parabank()
+    test_spark()
