@@ -6,7 +6,7 @@ from testar_evidence_playwright import AvailableAction
 from testar_evidence_playwright.sync_api import evidence_for
 
 
-class EvidenceRecordingSteps:
+class RecordingTESTARSteps:
     def __init__(self, steps):
         self.steps = steps
         self._available_descriptions = None

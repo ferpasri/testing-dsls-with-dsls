@@ -6,7 +6,7 @@ optional performance wrapper; Playwright remains the default backend.
 """
 from browser_backend import BrowserBackend
 from TESTAR_steps import TESTARSteps
-from evidence_steps import EvidenceRecordingSteps
+from recording_steps import RecordingTESTARSteps
 from performance_steps import PerformanceTESTARSteps
 from reporting import (
     print_sequence_start,
@@ -29,7 +29,7 @@ def configure_steps(*, filter_elements, preparations, oracles,
                         preparations=preparations, oracles=oracles)
 
     # EVIDENCE - add available-action and custom oracle-result recording around the original steps.
-    steps = EvidenceRecordingSteps(steps)
+    steps = RecordingTESTARSteps(steps)
 
     if measure_timings:
         steps = PerformanceTESTARSteps(steps, detailed=True)
